@@ -1,6 +1,7 @@
 import logging
 from argparse import ArgumentParser
 from traceback import print_exc
+from urllib2 import HTTPError
 
 from srs.db import download_db
 from srs.db import open_db
@@ -59,11 +60,21 @@ def main():
     for i, url in enumerate(sorted(all_urls)):
         log.info('scraping {} ({} of {})'.format(
             url, i + 1, len(all_urls)))
+
         try:
-            row = dict(url=url)
-            soup = scrape_soup(url)
-            row['twitter_handle'] = scrape_twitter_handle(soup, required=False)
-            row['facebook_url'] = scrape_facebook_url(soup, required=False)
+            row = dict(url=url, http_status=200)
+            soup = None
+            try:
+                soup = scrape_soup(url)
+            # we want to know if URL no longer works
+            except HTTPError as e:
+                row.http_status = e.code
+
+            if soup:
+                row['twitter_handle'] = scrape_twitter_handle(
+                    soup, required=False)
+                row['facebook_url'] = scrape_facebook_url(
+                    soup, required=False)
 
             dt.upsert(row, 'url')
         except:
