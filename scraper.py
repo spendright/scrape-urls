@@ -83,7 +83,8 @@ def main():
 
     if failed_urls:
         raise Exception(
-            'failed to scrape URLs:\n{}'.format('\n'.join(failed_urls)))
+            'failed to scrape {} URLs:\n{}'.format(
+                len(failed_urls), '\n'.join(failed_urls)))
 
 
 def parse_args(args=None):
