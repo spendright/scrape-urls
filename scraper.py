@@ -3,7 +3,6 @@ from argparse import ArgumentParser
 from httplib import BadStatusLine
 from os import environ
 from traceback import print_exc
-from urllib2 import HTTPError
 from urllib2 import URLError
 
 from bs4 import BeautifulSoup
@@ -37,17 +36,6 @@ URL_COLUMNS = {
 SKIP_TABLES = {
     'campaign_brand_rating',
     'campaign_company_rating',
-}
-
-
-# a URL is no longer valid if we get one of these codes:
-PERMANENT_FAILURES = {
-    301,  # infinite loop
-    302,  # infinite loop
-    303,  # infinite loop
-    400,  # Bad Request
-    404,
-    410,  # Gone
 }
 
 # raise an exception if more than this many URLs fail
@@ -87,7 +75,6 @@ def main():
             url, i + 1, len(all_urls)))
 
         try:
-            row = dict(url=url, http_status=200)
             html = None
             http_failure = None
 
@@ -96,12 +83,6 @@ def main():
             try:
                 html = scrape(url)
             # we want to know if URL no longer works
-            except HTTPError as e:
-                http_failure = (url, e)
-                # track permanent failures in DB
-                if e.code in PERMANENT_FAILURES:
-                    row = dict(url=url, http_status=e.code)
-                    dt.upsert(row, 'url')
             except URLError as e:
                 http_failure = (url, e)
             except BadStatusLine as e:
@@ -113,7 +94,7 @@ def main():
 
             if html:
                 soup = BeautifulSoup(html)
-                row = dict(url=url, http_status=200)
+                row = dict(url=url)
                 row['twitter_handle'] = scrape_twitter_handle(
                     soup, required=False)
                 row['facebook_url'] = scrape_facebook_url(
