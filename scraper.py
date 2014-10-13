@@ -1,14 +1,18 @@
 import logging
 from argparse import ArgumentParser
+from httplib import BadStatusLine
 from traceback import print_exc
 from urllib2 import HTTPError
+from urllib2 import URLError
+
+from bs4 import BeautifulSoup
 
 from srs.db import download_db
 from srs.db import open_db
 from srs.db import open_dt
 from srs.db import show_tables
 from srs.scrape import scrape_facebook_url
-from srs.scrape import scrape_soup
+from srs.scrape import scrape
 from srs.scrape import scrape_twitter_handle
 
 from srs.log import log_to_stderr
@@ -35,6 +39,20 @@ SKIP_TABLES = {
 }
 
 
+# a URL is no longer valid if we get one of these codes:
+PERMANENT_FAILURES = {
+    301,  # infinite loop
+    302,  # infinite loop
+    303,  # infinite loop
+    400,  # Bad Request
+    404,
+    410,  # Gone
+}
+
+# raise an exception if more than this many URLs fail
+MAX_PROPORTION_FAILURES = 0.1
+
+
 def main():
     opts = parse_args()
 
@@ -55,7 +73,8 @@ def main():
             all_urls.update(urls)
 
     dt = open_dt()
-    failed_urls = []
+    http_failures = []  # tuple of (url, failure_desc)
+    other_failures = []  # tuple of (url, failure_desc)
 
     for i, url in enumerate(sorted(all_urls)):
         log.info('scraping {} ({} of {})'.format(
@@ -63,28 +82,62 @@ def main():
 
         try:
             row = dict(url=url, http_status=200)
-            soup = None
+            html = None
+            http_failure = None
+
+            # problems fetching the HTML are expected. Record them,
+            # but don't count them as failure
             try:
-                soup = scrape_soup(url)
+                html = scrape(url)
             # we want to know if URL no longer works
             except HTTPError as e:
-                row.http_status = e.code
+                http_failure = (url, str(e.code))
+                # track permanent failures in DB
+                if e.code in PERMANENT_FAILURES:
+                    row = dict(url=url, http_status=e.code)
+                    dt.upsert(row, 'url')
+            except URLError as e:
+                http_failure = (url, str(e.reason))
+            except BadStatusLine as e:
+                http_failure = (url, str(e))
 
-            if soup:
+            if http_failure:
+                log.warn('  {}'.format(http_failure[1]))
+                continue
+
+            if html:
+                soup = BeautifulSoup(html)
+                row = dict(url=url, http_status=200)
                 row['twitter_handle'] = scrape_twitter_handle(
                     soup, required=False)
                 row['facebook_url'] = scrape_facebook_url(
                     soup, required=False)
+                dt.upsert(row, 'url')
 
-            dt.upsert(row, 'url')
-        except:
-            failed_urls.append(url)
+        except Exception as e:
+            # other failures are more serious; print the full exception
+            other_failures.append(url, str(e))
             print_exc()
 
-    if failed_urls:
+    # show a summary of failures
+    if http_failures:
+        log.warn('HTTP error on {} URL{}:'.format(
+            len(http_failures), 's' if len(http_failures) > 2 else ''))
+        for url, desc in http_failures:
+            log.warn(u'{} ({})'.format(url, desc))
+
+    if other_failures:
         raise Exception(
-            'failed to scrape {} URLs:\n{}'.format(
-                len(failed_urls), '\n'.join(failed_urls)))
+            'unexpected error on {} URL{}:\n'.format(
+                len(other_failures), 's' if len(other_failures) > 2 else ''),
+                '\n'.join(u'{} ({})'.format(url, desc)
+                          for url, desc in other_failures))
+
+    total_failures = len(http_failures) + len(other_failures)
+    if total_failures > len(all_urls) * MAX_PROPORTION_FAILURES:
+        raise Exception(
+            'too many failures ({} of {})'.format(
+                total_failures, len(all_urls)))
 
 
 def parse_args(args=None):
