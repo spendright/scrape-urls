@@ -1,11 +1,14 @@
 import logging
 from argparse import ArgumentParser
-from sqlite3 import OperationalError
+from traceback import print_exc
 
 from srs.db import download_db
 from srs.db import open_db
+from srs.db import open_dt
 from srs.db import show_tables
+from srs.scrape import scrape_facebook_url
 from srs.scrape import scrape_soup
+from srs.scrape import scrape_twitter_handle
 
 from srs.log import log_to_stderr
 
@@ -36,7 +39,7 @@ def main():
 
     log_to_stderr(verbose=opts.verbose, quiet=opts.quiet)
 
-    urls = set()
+    all_urls = set()
 
     for db_name in SOURCE_DBS:
         download_db(db_name)
@@ -48,9 +51,28 @@ def main():
             if urls:
                 log.info('read {} urls from {}.{}'.format(
                     len(urls), db_name, table))
-            urls.update(urls)
+            all_urls.update(urls)
 
+    dt = open_dt()
+    failed_urls = []
 
+    for i, url in enumerate(sorted(all_urls)):
+        log.info('scraping {} ({} of {})'.format(
+            url, i + 1, len(all_urls)))
+        try:
+            row = dict(url=url)
+            soup = scrape_soup(url)
+            row['twitter_handle'] = scrape_twitter_handle(soup, required=False)
+            row['facebook_url'] = scrape_facebook_url(soup, required=False)
+
+            dt.upsert(row, 'url')
+        except:
+            failed_urls.append(url)
+            print_exc()
+
+    if failed_urls:
+        raise Exception(
+            'failed to scrape URLs:\n{}'.format('\n'.join(failed_urls)))
 
 
 def parse_args(args=None):
