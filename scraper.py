@@ -11,6 +11,7 @@ from srs.db import download_db
 from srs.db import open_db
 from srs.db import open_dt
 from srs.db import show_tables
+from srs.iso_8601 import iso_now
 from srs.scrape import scrape_facebook_url
 from srs.scrape import scrape
 from srs.scrape import scrape_twitter_handle
@@ -78,11 +79,10 @@ def main():
             html = None
             http_failure = None
 
-            # problems fetching the HTML are expected. Record them,
-            # but don't count them as failure
             try:
                 html = scrape(url)
-            # we want to know if URL no longer works
+            # HTTP issues are expected. Track but don't count as scraper
+            # failing
             except URLError as e:
                 http_failure = (url, e)
             except BadStatusLine as e:
@@ -94,15 +94,17 @@ def main():
 
             if html:
                 soup = BeautifulSoup(html)
-                row = dict(url=url)
+                row = dict(url=url, last_scraped=iso_now())
                 row['twitter_handle'] = scrape_twitter_handle(
                     soup, required=False)
                 row['facebook_url'] = scrape_facebook_url(
                     soup, required=False)
+
+                log.debug('`url`: {}'.format(repr(row)))
                 dt.upsert(row, 'url')
 
+        # other failures are more serious; print the full exception
         except Exception as e:
-            # other failures are more serious; print the full exception
             other_failures.append((url, str(e)))
             print_exc()
 
