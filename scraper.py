@@ -7,6 +7,7 @@ from urllib2 import URLError
 
 from bs4 import BeautifulSoup
 
+from srs.db import create_table_if_not_exists
 from srs.db import download_db
 from srs.db import open_db
 from srs.db import open_dt
@@ -66,6 +67,8 @@ def main():
                     log.info('read {} urls from {}.{}'.format(
                         len(urls), db_name, table))
                 all_urls.update(urls)
+
+    create_table_if_not_exists('url', with_scraper_id=False)
 
     dt = open_dt()
     http_failures = []  # tuple of (url, exception)
