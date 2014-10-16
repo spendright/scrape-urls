@@ -93,6 +93,7 @@ def main():
 
             if http_failure:
                 log.warn('  {}'.format(str(http_failure[1])))
+                http_failures.append(http_failure)
                 continue
 
             if html:
