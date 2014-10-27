@@ -1,9 +1,7 @@
 import logging
 from argparse import ArgumentParser
-from httplib import BadStatusLine
 from os import environ
 from traceback import print_exc
-from urllib2 import URLError
 
 from bs4 import BeautifulSoup
 
@@ -71,66 +69,38 @@ def main():
     create_table_if_not_exists('url', with_scraper_id=False)
 
     dt = open_dt()
-    http_failures = []  # tuple of (url, exception)
-    other_failures = []  # tuple of (url, exception)
+    failures = []  # tuple of (url, exception)
 
     for i, url in enumerate(sorted(all_urls)):
         log.info('scraping {} ({} of {})'.format(
             url, i + 1, len(all_urls)))
 
         try:
-            html = None
-            http_failure = None
+            html = scrape(url)
 
-            try:
-                html = scrape(url)
-            # HTTP issues are expected. Track but don't count as scraper
-            # failing
-            except URLError as e:
-                http_failure = (url, e)
-            except BadStatusLine as e:
-                http_failure = (url, e)
+            soup = BeautifulSoup(html)
+            row = dict(url=url, last_scraped=iso_now())
+            row['twitter_handle'] = scrape_twitter_handle(
+                soup, required=False)
+            row['facebook_url'] = scrape_facebook_url(
+                soup, required=False)
 
-            if http_failure:
-                log.warn('  {}'.format(str(http_failure[1])))
-                http_failures.append(http_failure)
-                continue
-
-            if html:
-                soup = BeautifulSoup(html)
-                row = dict(url=url, last_scraped=iso_now())
-                row['twitter_handle'] = scrape_twitter_handle(
-                    soup, required=False)
-                row['facebook_url'] = scrape_facebook_url(
-                    soup, required=False)
-
-                log.debug('`url`: {}'.format(repr(row)))
-                dt.upsert(row, 'url')
-
-        # other failures are more serious; print the full exception
+            log.debug('`url`: {}'.format(repr(row)))
+            dt.upsert(row, 'url')
         except Exception as e:
-            other_failures.append((url, str(e)))
+            failures.append((url, e))
             print_exc()
 
     # show a summary of failures
-    if http_failures:
-        log.warn('HTTP error on {} URL{}:'.format(
-            len(http_failures), 's' if len(http_failures) > 2 else ''))
-        for url, e in http_failures:
-            log.warn(u'{} ({})'.format(url, first_line(str(e))))
+    if failures:
+        log.warn('Failed to scrape {} of {} URL{}:'.format(
+            len(failures), url,
+            's' if len(failures) > 2 else ''))
+        for url, e in failures:
+            log.warn(u'  {}: {}'.format(url, repr(e)))
 
-    if other_failures:
-        raise Exception(
-            'unexpected error on {} URL{}:\n'.format(
-                len(other_failures), 's' if len(other_failures) > 2 else ''),
-                '\n'.join(u'{} ({})'.format(url, first_line(str(e)))
-                          for url, e in other_failures))
-
-    total_failures = len(http_failures) + len(other_failures)
-    if total_failures > len(all_urls) * MAX_PROPORTION_FAILURES:
-        raise Exception(
-            'too many failures ({} of {})'.format(
-                total_failures, len(all_urls)))
+    if len(failures) > len(all_urls) * MAX_PROPORTION_FAILURES:
+        raise Exception('too many failures')
 
 
 def parse_args(args=None):
@@ -145,10 +115,6 @@ def parse_args(args=None):
         help='Turn off info logging')
 
     return parser.parse_args(args)
-
-
-def first_line(s):
-    return s.split('\n')[0]
 
 
 def select_urls(db, table):
