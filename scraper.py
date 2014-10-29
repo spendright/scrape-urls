@@ -109,7 +109,7 @@ def main():
     # show a summary of failures
     if failures:
         log.warn('Failed to scrape {} of {} URL{}:'.format(
-            len(failures), url,
+            len(failures), len(all_urls),
             's' if len(failures) > 2 else ''))
         for url, e in failures:
             log.warn(u'  {}: {}'.format(url, repr(e)))
