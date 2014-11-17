@@ -54,7 +54,7 @@ SKIP_TABLES = {
 }
 
 # raise an exception if more than this many URLs fail
-MAX_PROPORTION_FAILURES = 0.1
+MAX_PROPORTION_FAILURES = 0.15
 
 
 def main():
