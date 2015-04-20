@@ -1,1 +1,6 @@
--r submodules/srs/requirements.txt
+# requirements for srs (have to inline these for morph.io)
+Unidecode==0.04.9
+beautifulsoup4==4.1.3
+dumptruck==0.1.6
+html5lib==0.90  # used by beautifulsoup4
+requests==1.0.4  # used by srs.vendor.reppy
