@@ -1,3 +1,3 @@
 [submodule "submodules/srs"]
 	path = submodules/srs
-	url = https://github.com/spendright-scrapers/srs.git
+	url = https://github.com/spendright/srs.git
