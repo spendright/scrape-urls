@@ -47,10 +47,11 @@ URL_COLUMNS = {
     'url',
 }
 
-# rating tables have urls too, but they don't have twitter handles, etc.
-SKIP_TABLES = {
-    'campaign_brand_rating',
-    'campaign_company_rating',
+# tables to fetch data from (don't bother with claim/rating urls)
+TABLES = {
+    'brand',
+    'campaign',
+    'company',
 }
 
 # raise an exception if more than this many URLs fail
@@ -73,7 +74,7 @@ def main():
             download_db(db_name)
             db = open_db(db_name)
             for table in show_tables(db):
-                if table in SKIP_TABLES:
+                if table not in TABLES:
                     continue
                 urls = select_urls(db, table)
                 if urls:
