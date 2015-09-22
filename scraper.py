@@ -55,7 +55,7 @@ TABLES = {
 }
 
 # raise an exception if more than this many URLs fail
-MAX_PROPORTION_FAILURES = 0.15
+MAX_PROPORTION_FAILURES = 0.25
 
 
 def main():
